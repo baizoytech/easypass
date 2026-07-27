@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EasyPass</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+{% raw %}
+<div id="app" v-cloak>
+
+    <!-- ========== Lock Screen ========== -->
+    <div v-if="!isUnlocked" class="lock-screen">
+        <div class="lock-card">
+            <div class="lock-logo-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <h1 class="lock-title">EasyPass</h1>
+            <p class="lock-subtitle" v-if="!hasMasterKey">设置主密码以继续</p>
+            <p class="lock-subtitle" v-else>请输入主密码以解锁</p>
+            <div class="lock-form">
+                <template v-if="!hasMasterKey">
+                    <input type="password" v-model="setupPassword" placeholder="新主密码" @keyup="lockKeyup" class="lock-input" ref="firstInput">
+                    <input type="password" v-model="setupPasswordConfirm" placeholder="确认新主密码" @keyup="lockKeyup" class="lock-input">
+                </template>
+                <template v-else>
+                    <input type="password" v-model="masterPassword" placeholder="主密码" @keyup="lockKeyup" class="lock-input" ref="firstInput">
+                </template>
+                <p class="lock-error" v-if="lockError">{{ lockError }}</p>
+                <button @click="hasMasterKey ? unlock() : setupMasterKey()" class="lock-btn">
+                    {{ hasMasterKey ? '解锁' : '继续' }}
+                </button>
+            </div>
+        </div>
+    </div>
+    <div v-else class="app-layout">
+
+        <!-- ========== 1. Sidebar ========== -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-brand">
+                    <div class="sidebar-brand-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </div>
+                    <span>EasyPass</span>
+                </div>
+                <div class="sidebar-actions">
+                    <button @click="showPresetModal = true" class="icon-btn" title="预设数据管理">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    </button>
+                    <button @click="openDbViewer()" class="icon-btn" title="查看数据库">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+                    </button>
+                    
+                    <button @click="toggleTheme" class="theme-toggle-btn" title="切换主题">
+                        <svg v-if="theme === 'dark'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                    </button>
+<button @click="lockApp" class="icon-btn" title="锁定">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-nav">
+                <div class="nav-item" :class="{ active: !selectedCompanyId && !searchKeyword }" @click="selectCompany(null); clearSearch()">
+                    <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+                    <span class="nav-text">所有项目</span>
+                    <span class="nav-count">{{ allAccounts.length }}</span>
+                </div>
+
+                <div style="padding: 12px 8px; border-bottom: 1px solid var(--border);">
+                    <select v-model="selectedCountryId" class="form-input" style="padding: 6px; font-size: 12px;">
+                        <option :value="null">所有国家/地区</option>
+                        <option v-for="c in countriesWithCompanies" :key="c.id" :value="c.id">{{ getCountryFlag(c.code) }} {{ c.name }}</option>
+                    </select>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">
+                        <span>公司列表</span>
+                        <button class="add-tiny-btn" @click="openAddPresetCompanyFromMain()" title="添加公司">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </button>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:2px; margin-top: 4px;">
+                        
+                        <div class="tree-child" v-if="selectedCountryId" :class="{ active: selectedCompanyId === null }" @click="selectCompany(null)">
+                            <div class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+                            <span class="nav-text">所有公司</span>
+                            <span class="nav-count">{{ displayedAccountsForCountry }}</span>
+                        </div>
+                        <div class="tree-child" v-for="co in filteredCompanies" :key="'co-'+co.id"
+                             :class="{ active: selectedCompanyId === co.id }" @click="selectCompany(co.id)">
+                            <span class="nav-text">{{ co.name }}</span>
+                            <span class="nav-count">{{ getAccountsForCompany(co.id).length }}</span>
+                            <button class="add-tiny-btn" style="position:absolute; right:8px;" @click.stop="openEditCompanyFromMain(co)" title="编辑公司">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ========== 2. List Pane (Middle) ========== -->
+        <div class="list-pane">
+             <div class="list-header">
+                  <div class="list-title">
+                       {{ contentTitle || '所有账号' }}
+                       <div>
+                           <button class="add-tiny-btn" @click="openAddWebsite(selectedCompanyId)" v-if="selectedCompanyId" title="添加平台" style="display:inline-flex; margin-right:8px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></button>
+                           <button class="add-tiny-btn" @click="openAddAccount" title="新建账号" style="display:inline-flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                       </div>
+                  </div>
+                  <div class="search-box">
+                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                       <input type="text" v-model="searchKeyword" @input="doSearch" placeholder="搜索账号、平台...">
+                  </div>
+                  <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-start;">
+                      <button class="btn" style="padding:4px 12px; font-size:12px;" :class="listFilter === 'active' ? 'btn-primary' : 'btn-outline'" @click="listFilter = 'active'">使用中</button>
+                      <button class="btn" style="padding:4px 12px; font-size:12px;" :class="listFilter === 'banned' ? 'btn-primary' : 'btn-outline'" @click="listFilter = 'banned'">已禁用</button>
+                      <button class="btn" style="padding:4px 12px; font-size:12px;" :class="listFilter === 'deleted' ? 'btn-primary' : 'btn-outline'" @click="listFilter = 'deleted'">已删除</button>
+                  </div>
+             </div>
+             <div class="list-scroll">
+                 <div class="list-grid" v-if="(searchKeyword && searchResults.length > 0) || (!searchKeyword && displayedAccounts.length > 0)">
+                     <div v-for="acc in (searchKeyword ? searchResults : displayedAccounts)" :key="acc.id" class="account-card" @click="selectAccount(acc)" style="cursor:pointer;">
+                         
+                         <!-- Title Row -->
+                         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                             <div class="info-row" style="font-size:16px; font-weight:600; color:var(--text-primary); cursor:pointer;" @click.stop="copyField(acc.account_name, '账号')" title="点击复制账号">
+                                 <span class="info-content">{{ acc.account_name }}</span>
+                                 <div class="hover-copy">
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                 </div>
+                             </div>
+                             <div style="display:flex; align-items:center; gap:8px;">
+                                 <span class="tag" :class="'tag-' + getWebsiteType(acc.website_id)">{{ getWebsiteType(acc.website_id) === 'web' ? '网页' : 'APP' }}</span>
+                             </div>
+                         </div>
+                         
+                         <!-- Info Rows -->
+                         <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+                             
+                             <div class="info-row" :style="getWebsiteUrl(acc.website_id) ? 'cursor:pointer;' : ''" @click.stop="getWebsiteUrl(acc.website_id) && copyField(getWebsiteUrl(acc.website_id), '网址')" :title="getWebsiteUrl(acc.website_id) ? '点击复制网址' : ''">
+                                 <svg class="info-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                 <a v-if="getWebsiteUrl(acc.website_id)" class="info-content" :href="getWebsiteUrl(acc.website_id)" target="_blank" style="color:var(--brand); text-decoration:underline;" @click.stop>{{ getWebsiteUrl(acc.website_id) }}</a>
+                                 <span v-else class="info-content" style="color:var(--text-tertiary);">-</span>
+                                 <div class="hover-copy" v-if="getWebsiteUrl(acc.website_id)">
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                 </div>
+                             </div>
+                             
+                             <div class="info-row" style="cursor:pointer;" @click.stop="copyPassword(acc)" title="点击复制密码">
+                                 <svg class="info-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                 <span class="info-content" v-if="!acc._showPwd" style="letter-spacing:2px; user-select:none;">••••••••</span>
+                                 <span class="info-content" v-else>{{ acc._decryptedPwd }}</span>
+                                 <div class="hover-copy" style="margin-left:auto;" @click.stop="viewPassword(acc)" title="查看密码">
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                 </div>
+                                 <div class="hover-copy" title="复制密码">
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                 </div>
+                             </div>
+                             
+                             <div class="info-row" :style="acc.phone ? 'cursor:pointer;' : ''" @click.stop="acc.phone && copyField(acc.phone, '手机号')" :title="acc.phone ? '点击复制手机号' : ''">
+                                 <svg class="info-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                                 <span v-if="acc.phone" class="info-content">{{ acc.phone }}</span>
+                                 <span v-else class="info-content" style="color:var(--text-tertiary);">-</span>
+                                 <div class="hover-copy" v-if="acc.phone">
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                 </div>
+                             </div>
+                             
+                             <div class="info-row" :style="acc.email ? 'cursor:pointer;' : ''" @click.stop="acc.email && copyField(acc.email, '邮箱')" :title="acc.email ? '点击复制邮箱' : ''">
+                                 <svg class="info-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                 <span v-if="acc.email" class="info-content">{{ acc.email }}</span>
+                                 <span v-else class="info-content" style="color:var(--text-tertiary);">-</span>
+                                 <div class="hover-copy" v-if="acc.email">
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                 </div>
+                             </div>
+                             
+                         </div>
+                         
+                         <!-- Footer row -->
+                         <div class="card-meta" style="justify-content:space-between; padding-top:12px; border-top:1px solid var(--border);">
+                             <div class="card-company">
+                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                                 {{ getWebsiteName(acc.website_id) }}
+                                 <template v-if="(searchKeyword || !selectedCompanyId) && getCompanyName(websites.find(w=>w.id===acc.website_id)?.company_id) !== getWebsiteName(acc.website_id)"> · {{ getCompanyName(websites.find(w=>w.id===acc.website_id)?.company_id) }}</template>
+                             </div>
+                             <span class="status-badge"><span class="status-dot" :class="acc.is_deleted ? 'deleted' : acc.status"></span> {{ statusLabel(acc.status, acc.is_deleted) }}</span>
+                         </div>
+                         
+                     </div>
+                 </div>
+                 <div class="empty-state" v-else style="padding:80px 0;">
+                     <div class="empty-desc">无匹配的账号数据</div>
+                 </div>
+             </div>
+        </div>
+
+        <!-- ========== 3. Detail Pane (Right) ========== -->
+        <div class="detail-pane" :class="{ collapsed: !selectedAccount && !showAccountForm }">
+            <div class="detail-header" v-if="selectedAccount || showAccountForm">
+                <div class="breadcrumb">
+                    <template v-if="showAccountForm">
+                        <span>{{ editingAccount ? '编辑账号' : '新建账号' }}</span>
+                    </template>
+                    <template v-else-if="selectedAccount">
+                        <span>{{ getCompanyName(websites.find(w=>w.id===selectedAccount.website_id)?.company_id) }}</span>
+                    </template>
+                </div>
+                <div class="header-actions" style="display:flex; gap:12px; align-items:center;">
+                     <template v-if="showAccountForm">
+                         <button class="btn btn-outline" @click="closeAccountForm" style="padding:4px 12px; min-width:unset; height:32px;">取消</button>
+                         <button class="btn btn-primary" @click="saveAccount" style="padding:4px 12px; min-width:unset; height:32px;">保存</button>
+                     </template>
+                     <template v-else>
+                         <button class="icon-btn" style="color:var(--c-success);" @click="restoreAccount(selectedAccount)" v-if="selectedAccount && selectedAccount.is_deleted" title="恢复账号">
+                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                         </button>
+                         <button class="icon-btn" @click="openEditAccount(selectedAccount)" v-if="selectedAccount && !selectedAccount.is_deleted" title="编辑">
+                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                         </button>
+                         <button class="icon-btn" style="color:var(--c-danger);" v-if="selectedAccount && !selectedAccount.is_deleted" @click="confirmDeleteAccount(selectedAccount)" title="删除">
+                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                         </button>
+                     </template>
+                     <div style="width:1px; height:20px; background:var(--border); margin:0 4px;"></div>
+                     <button class="icon-btn" @click="closeDetail" title="关闭">
+                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                     </button>
+                 </div>
+            </div>
+            
+            <div class="detail-scroll" v-if="showAccountForm">
+                <div class="detail-content">
+                    
+                    <div>
+                        <div class="form-group">
+                            <label>所属公司 <span class="req">*</span></label>
+                            <select v-model="accountForm.company_id" class="form-input" @change="onAccountCompanyChange">
+                                <option value="">选择公司...</option>
+                                <optgroup v-for="c in countries" :key="c.id" :label="c.name">
+                                    <option v-for="co in getCompaniesForCountry(c.id)" :key="co.id" :value="co.id">{{ co.name }}</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                <label style="margin-bottom:0;">所属平台/网站 <span class="req">*</span></label>
+                                <button type="button" class="btn btn-text" style="padding:0; font-size:12px; height:auto; color:var(--brand);" @click="openAddWebsite(accountForm.company_id)" v-if="accountForm.company_id">
+                                    + 新建平台
+                                </button>
+                            </div>
+                            <select v-model="accountForm.website_id" class="form-input">
+                                <option value="">选择平台...</option>
+                                <option v-for="w in websitesForAccountForm" :key="w.id" :value="w.id">{{ w.name }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="form-group">
+                            <label>登录名 (账号/邮箱) <span class="req">*</span></label>
+                            <input type="text" v-model="accountForm.account_name" placeholder="邮箱或用户名" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>密码 <span class="req" v-if="!editingAccount">*</span></label>
+                            <div class="pwd-group">
+                                <input :type="showAccountPwd ? 'text' : 'password'" v-model="accountForm.plain_password" :placeholder="editingAccount ? '留空以保持原密码不变' : '密码'" class="form-input">
+                                <button @click="showAccountPwd = !showAccountPwd" class="btn-icon-text">
+                                    <svg v-if="!showAccountPwd" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                </button>
+                                <button @click="generatePassword" class="btn-icon-text" title="生成随机密码">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>账号状态 <span class="req">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-opt" :class="{ active: accountForm.status === 'active' }">
+                                <input type="radio" v-model="accountForm.status" value="active"> 活跃 (Active)
+                            </label>
+                            <label class="radio-opt" :class="{ active: accountForm.status === 'unregistered' }">
+                                <input type="radio" v-model="accountForm.status" value="unregistered"> 未注册
+                            </label>
+                            <label class="radio-opt" :class="{ active: accountForm.status === 'deprecated' }">
+                                <input type="radio" v-model="accountForm.status" value="deprecated"> 已废弃
+                            </label>
+                            <label class="radio-opt" :class="{ active: accountForm.status === 'banned' }">
+                                <input type="radio" v-model="accountForm.status" value="banned"> 封禁
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <div class="form-group">
+                            <label>绑定手机号</label>
+                            <input type="text" v-model="accountForm.phone" placeholder="+86 138..." class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>辅助/绑定邮箱</label>
+                            <input type="email" v-model="accountForm.email" placeholder="backup@example.com" class="form-input">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="form-group">
+                            <label>注册日期</label>
+                            <input type="date" v-model="accountForm.registered_at" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>描述</label>
+                            <input type="text" v-model="accountForm.description" placeholder="描述信息..." class="form-input">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="detail-scroll" v-else-if="selectedAccount">
+                <div class="detail-content">
+                    <div class="detail-title-area">
+                        <div>
+                            <h2 class="detail-title">{{ selectedAccount.account_name }}</h2>
+                            <div class="detail-subtitle">
+                                <span class="status-badge"><span class="status-dot" :class="selectedAccount.is_deleted ? 'deleted' : selectedAccount.status"></span> {{ statusLabel(selectedAccount.status, selectedAccount.is_deleted) }}</span>
+                                <span>·</span>
+                                <span>{{ getWebsiteName(selectedAccount.website_id) }}</span>
+                                <a :href="getWebsiteUrl(selectedAccount.website_id)" target="_blank" v-if="getWebsiteUrl(selectedAccount.website_id)" style="color:var(--brand); margin-left:8px;">访问平台</a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <div class="field-row">
+                            <div class="field-label">密码</div>
+                            <div class="field-value-box">
+                                <div class="field-text">
+                                    <span class="pwd-mask" v-if="!selectedAccount._showPwd">••••••••••••••••</span>
+                                    <span v-else>{{ selectedAccount._decryptedPwd }}</span>
+                                </div>
+                                <div class="field-actions">
+                                    <button class="field-action-btn" @click="viewPassword(selectedAccount)" title="显示/隐藏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                                    <button class="field-action-btn" :class="{ copied: selectedAccount._copied }" @click="copyPassword(selectedAccount)" title="复制"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="field-row" v-if="selectedAccount.email">
+                            <div class="field-label">绑定邮箱</div>
+                            <div class="field-value-box">
+                                <div class="field-text">{{ selectedAccount.email }}</div>
+                                <div class="field-actions">
+                                    <button class="field-action-btn" @click="copyField(selectedAccount.email, '邮箱')" title="复制"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="field-row" v-if="selectedAccount.phone">
+                            <div class="field-label">绑定手机号</div>
+                            <div class="field-value-box">
+                                <div class="field-text">{{ selectedAccount.phone }}</div>
+                                <div class="field-actions">
+                                    <button class="field-action-btn" @click="copyField(selectedAccount.phone, '手机号')" title="复制"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="field-row" v-if="selectedAccount.description">
+                            <div class="field-label">描述</div>
+                            <div class="field-value-box" style="background:transparent; border-color:transparent; padding:4px 0;">
+                                <div style="color:var(--text-secondary); font-size:13px; line-height:1.5; white-space:pre-wrap;">{{ selectedAccount.description }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="field-row" v-if="selectedAccount.registered_at">
+                            <div class="field-label">注册时间</div>
+                            <div class="field-value-box" style="background:transparent; border-color:transparent; padding:4px 0;">
+                                <div style="color:var(--text-secondary); font-size:13px;">{{ selectedAccount.registered_at }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="empty-state" v-else>
+                <div class="empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+                <h3 class="empty-title">未选择账号</h3>
+                <p class="empty-desc">在左侧列表中点击账号以查看详情，或点击顶部新建按钮添加。</p>
+            </div>
+        </div>
+
+    </div>
+
+<!-- ========== Modals ========== -->
+
+    
+    <!-- Company Modal -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showCompanyModal" @click.self="showCompanyModal = false">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>{{ editingCompany ? '编辑公司' : '新建公司' }}</h3>
+                <button @click="showCompanyModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>公司名称 <span class="req">*</span></label>
+                    <input type="text" v-model="companyForm.name" placeholder="例如：腾讯，阿里巴巴" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>所属国家 <span class="req">*</span></label>
+                    <select v-model="companyForm.country_id" class="form-input">
+                        <option value="">选择国家...</option>
+                        <option v-for="c in countries" :key="c.id" :value="c.id">{{ getCountryFlag(c.code) }} {{ c.name }}</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="confirmDeleteCompany" class="btn btn-danger" v-if="editingCompany" style="margin-right:auto">删除</button>
+                <button @click="showCompanyModal = false" class="btn btn-outline">取消</button>
+                <button @click="saveCompany" class="btn btn-primary">保存公司</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- Delete Company Modal -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showDeleteCompanyModal" @click.self="showDeleteCompanyModal = false">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>删除公司</h3>
+                <button @click="showDeleteCompanyModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px;">确定要删除 <strong>{{ deletingCompany && deletingCompany.name }}</strong> 吗？它下面的所有平台和账号都会被移入回收站。</p>
+            </div>
+            <div class="modal-footer">
+                <button @click="showDeleteCompanyModal = false" class="btn btn-outline">取消</button>
+                <button @click="doDeleteCompany" class="btn btn-danger">确认删除</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- Website/App Modal -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showWebsiteModal" @click.self="showWebsiteModal = false">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>{{ editingWebsite ? '编辑平台' : '新建平台' }}</h3>
+                <button @click="showWebsiteModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>平台名称 <span class="req">*</span></label>
+                    <input type="text" v-model="websiteForm.name" placeholder="例如：网上银行，微信" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>平台类型 <span class="req">*</span></label>
+                    <div class="radio-group">
+                        <label class="radio-opt" :class="{ active: websiteForm.type === 'web' }">
+                            <input type="radio" v-model="websiteForm.type" value="web"> 网页
+                        </label>
+                        <label class="radio-opt" :class="{ active: websiteForm.type === 'app' }">
+                            <input type="radio" v-model="websiteForm.type" value="app"> 手机 APP
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" v-if="websiteForm.type === 'web'">
+                    <label>网址 / URL</label>
+                    <input type="url" v-model="websiteForm.url" placeholder="https://" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>所属公司 <span class="req">*</span></label>
+                    <select v-model="websiteForm.company_id" class="form-input">
+                        <option value="">选择公司...</option>
+                        <optgroup v-for="c in countries" :key="c.id" :label="c.name">
+                            <option v-for="co in getCompaniesForCountry(c.id)" :key="co.id" :value="co.id">{{ co.name }}</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="showWebsiteModal = false" class="btn btn-outline">取消</button>
+                <button @click="saveWebsite" class="btn btn-primary">保存平台</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- Account Modal -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showAccountModal" @click.self="showAccountModal = false">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3>{{ editingAccount ? '编辑账号' : '新建账号' }}</h3>
+                <button @click="showAccountModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <div>
+                    <div class="form-group">
+                        <label>所属公司 <span class="req">*</span></label>
+                        <select v-model="accountForm.company_id" class="form-input" @change="onAccountCompanyChange">
+                            <option value="">选择公司...</option>
+                            <optgroup v-for="c in countries" :key="c.id" :label="c.name">
+                                <option v-for="co in getCompaniesForCountry(c.id)" :key="co.id" :value="co.id">{{ co.name }}</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>App/Website <span class="req">*</span></label>
+                        <select v-model="accountForm.website_id" class="form-input">
+                            <option value="">Select app...</option>
+                            <option v-for="w in websitesForAccountForm" :key="w.id" :value="w.id">{{ w.name }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div class="form-group">
+                        <label>Username / Login <span class="req">*</span></label>
+                        <input type="text" v-model="accountForm.account_name" placeholder="邮箱或用户名" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>密码 <span class="req" v-if="!editingAccount">*</span></label>
+                        <div class="pwd-group">
+                            <input :type="showAccountPwd ? 'text' : 'password'" v-model="accountForm.plain_password" :placeholder="editingAccount ? 'Leave blank to keep unchanged' : 'Password'" class="form-input">
+                            <button @click="showAccountPwd = !showAccountPwd" class="btn-icon-text">
+                                <svg v-if="!showAccountPwd" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                            <button @click="generatePassword" class="btn-icon-text" title="生成随机密码">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Status <span class="req">*</span></label>
+                    <div class="radio-group">
+                        <label class="radio-opt" :class="{ active: accountForm.status === 'active' }">
+                            <input type="radio" v-model="accountForm.status" value="active"> Active
+                        </label>
+                        <label class="radio-opt" :class="{ active: accountForm.status === 'unregistered' }">
+                            <input type="radio" v-model="accountForm.status" value="unregistered"> Unregistered
+                        </label>
+                        <label class="radio-opt" :class="{ active: accountForm.status === 'deprecated' }">
+                            <input type="radio" v-model="accountForm.status" value="deprecated"> Deprecated
+                        </label>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="text" v-model="accountForm.phone" placeholder="+1..." class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Recovery Email</label>
+                        <input type="email" v-model="accountForm.email" placeholder="backup@..." class="form-input">
+                    </div>
+                </div>
+                <div>
+                    <div class="form-group">
+                        <label>Registration Date</label>
+                        <input type="date" v-model="accountForm.registered_at" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>描述</label>
+                        <input type="text" v-model="accountForm.description" placeholder="描述信息..." class="form-input">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="showAccountModal = false" class="btn btn-outline">取消</button>
+                <button @click="saveAccount" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- Delete Account Modal -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showDeleteModal" @click.self="showDeleteModal = false">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>删除账号</h3>
+                <button @click="showDeleteModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px;">确定要删除账号 <strong>{{ deletingAccount && deletingAccount.account_name }}</strong>吗？它将被移入回收站。</p>
+            </div>
+            <div class="modal-footer">
+                <button @click="showDeleteModal = false" class="btn btn-outline">取消</button>
+                <button @click="doDeleteAccount" class="btn btn-danger">确认删除</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- 预设数据管理弹窗（布局简写，功能完整） -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showPresetModal" @click.self="showPresetModal = false">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3>内置预设数据管理</h3>
+                <button @click="showPresetModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="panel-header-flex">
+                    <div class="panel-filters">
+                        <select v-model="presetCountry" class="form-input" style="width:160px">
+                            <option value="">全部区域</option>
+                            <option v-for="c in presetCountryCodes" :key="c" :value="c">{{ getCountryNameByCode(c) }}</option>
+                        </select>
+                        <input type="text" v-model="presetSearch" placeholder="搜索预设数据..." class="form-input" style="width:240px">
+                    </div>
+                    <button @click="openAddPresetCompany" class="btn btn-primary">添加预设公司</button>
+                </div>
+
+                <div class="preset-tree">
+                    <div v-for="group in filteredPresetGroups" :key="group.code">
+                        <div class="preset-country-row">
+                            {{ getCountryFlag(group.code) }} {{ group.name }}
+                        </div>
+                        <div class="preset-company-row" v-for="co in group.companies" :key="co.id">
+                            <div class="preset-co-left">
+                                <span>{{ co.name }}</span>
+                                <span class="text-muted" style="font-size: 11px;">({{ co.websites.length }} 个平台)</span>
+                            </div>
+                            <div class="preset-co-right">
+                                <button class="action-btn" @click="openAddPresetWebsite(co.id)" title="添加预设平台"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                                <button class="action-btn" @click="openEditPresetCompany(co)" title="编辑预设公司"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                                <label class="switch">
+                                    <input type="checkbox" :checked="co.is_visible" @change="e => togglePresetCompany(co.id, e.target.checked)">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button @click="showPresetModal = false" class="btn btn-primary">完成</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- 预设公司/平台表单弹窗（为节省篇幅，沿用旧结构和新样式） -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showPresetCompanyModal" @click.self="showPresetCompanyModal = false">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>{{ editingPresetCompany ? '编辑预设公司' : '新建预设公司' }}</h3>
+                <button @click="showPresetCompanyModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body" style="overflow: visible;">
+                <div class="form-group"><label>公司名称 <span class="req">*</span></label><input type="text" v-model="presetCompanyForm.name" class="form-input"></div>
+                <div class="form-group" style="position: relative;">
+                    <label>国家/地区 <span class="req">*</span></label>
+                    <input type="text" v-model="presetCountrySearch" @focus="onPresetCountryFocus" @input="showPresetCountryDrop = true" @blur="onPresetCountryBlur" class="form-input" placeholder="输入国家名称或代码搜索..." autocomplete="off">
+                    <ul v-show="showPresetCountryDrop" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); z-index: 1000; margin: 4px 0 0; padding: 4px 0; list-style: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        <li v-for="c in filteredCountriesForPreset" :key="c.id" @mousedown.prevent="pickPresetCountry(c)" style="padding: 7px 12px; cursor: pointer; font-size: 13px; color: var(--text-primary); transition: background 0.1s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+                            [{{ c.code }}] {{ c.name }}
+                        </li>
+                        <li v-if="filteredCountriesForPreset.length === 0" style="padding: 8px 12px; font-size: 12px; color: var(--text-tertiary); text-align: center;">无匹配结果</li>
+                    </ul>
+                </div>
+                <div class="form-group"><label>描述</label><input type="text" v-model="presetCompanyForm.description" class="form-input" placeholder="描述信息..."></div>
+            </div>
+            <div class="modal-footer">
+                <button @click="confirmDeletePresetCompany(editingPresetCompany)" class="btn btn-danger" v-if="editingPresetCompany" style="margin-right:auto">删除</button>
+                <button @click="showPresetCompanyModal = false" class="btn btn-outline">取消</button>
+                <button @click="savePresetCompany" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showPresetWebsiteModal" @click.self="showPresetWebsiteModal = false">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>{{ editingPresetWebsite ? '编辑预设平台' : '新建预设平台' }}</h3>
+                <button @click="showPresetWebsiteModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label>平台名称 <span class="req">*</span></label><input type="text" v-model="presetWebsiteForm.name" class="form-input"></div>
+                <div class="form-group">
+                    <label>平台类型 <span class="req">*</span></label>
+                    <div class="radio-group">
+                        <label class="radio-opt" :class="{ active: presetWebsiteForm.type === 'web' }"><input type="radio" v-model="presetWebsiteForm.type" value="web"> 网页</label>
+                        <label class="radio-opt" :class="{ active: presetWebsiteForm.type === 'app' }"><input type="radio" v-model="presetWebsiteForm.type" value="app"> 手机 APP</label>
+                    </div>
+                </div>
+                <div class="form-group" v-if="presetWebsiteForm.type === 'web'"><label>网址 / URL</label><input type="url" v-model="presetWebsiteForm.url" class="form-input"></div>
+            </div>
+            <div class="modal-footer">
+                <button @click="confirmDeletePresetWebsite(editingPresetWebsite)" class="btn btn-danger" v-if="editingPresetWebsite" style="margin-right:auto">删除</button>
+                <button @click="showPresetWebsiteModal = false" class="btn btn-outline">取消</button>
+                <button @click="savePresetWebsite" class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showPresetDeleteModal" @click.self="showPresetDeleteModal = false">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>确认删除</h3>
+                <button @click="showPresetDeleteModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body"><p style="font-size:13px">确定要删除这条预设项 <strong>{{ deletingPresetItem && deletingPresetItem.name }}</strong> 吗？</p></div>
+            <div class="modal-footer">
+                <button @click="showPresetDeleteModal = false" class="btn btn-outline">取消</button>
+                <button @click="doDeletePresetItem" class="btn btn-danger">删除</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- Database Viewer Modal -->
+    <transition name="modal">
+    <div class="modal-overlay" v-if="showDbViewerModal" @click.self="showDbViewerModal = false">
+        <div class="modal modal-lg" style="width: 90vw; max-width: 1200px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+                    <h3 style="margin:0">数据库表查看器</h3>
+                </div>
+                <button @click="showDbViewerModal = false" class="modal-close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            </div>
+            <div class="modal-body" style="padding: 16px; max-height: calc(80vh - 100px); display: flex; flex-direction: column; gap: 12px;">
+                <div class="panel-header-flex" style="margin-bottom:0; flex-shrink:0;">
+                    <div class="panel-filters" style="display: flex; gap: 12px; width: 100%;">
+                        <select v-model="selectedDbTable" @change="onDbTableChange" class="form-input" style="width: 220px;">
+                            <option value="">选择数据表...</option>
+                            <option v-for="tbl in dbTables" :key="tbl.name" :value="tbl.name">{{ tbl.name }}</option>
+                        </select>
+                        <input type="text" v-model="dbSearchQuery" placeholder="在表格数据中搜索..." class="form-input" style="flex: 1;">
+                        <button class="btn btn-outline" @click="dbSearchQuery = ''" v-if="dbSearchQuery" style="padding: 0 12px;">清空</button>
+                    </div>
+                </div>
+
+                <div class="db-table-wrapper" style="flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-base);">
+                    <table class="db-table" style="width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; text-align: left;">
+                        <thead>
+                            <tr style="background: var(--bg-sidebar); border-bottom: 1px solid var(--border); position: sticky; top:0; z-index: 5;">
+                                <th v-for="col in dbTableColumns" :key="col" @click="setDbSort(col)" style="padding: 8px 12px; font-weight: 600; cursor: pointer; user-select: none; border-right: 1px solid var(--border); font-family: var(--font-sans);">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                                        <span>{{ col }}</span>
+                                        <span style="font-size: 10px; color: var(--text-tertiary);">
+                                            <span v-if="dbSortKey === col">{{ dbSortOrder === 'asc' ? '▲' : '▼' }}</span>
+                                            <span v-else style="opacity: 0.3;">↕</span>
+                                        </span>
+                                    </div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(row, idx) in filteredAndSortedDbRows" :key="idx" style="border-bottom: 1px solid var(--border); transition: background 0.1s;" class="db-row">
+                                <td v-for="col in dbTableColumns" :key="col" style="padding: 8px 12px; border-right: 1px solid var(--border); white-space: nowrap; max-width: 250px; overflow: hidden; text-overflow: ellipsis;" :title="row[col]">
+                                    <span v-if="row[col] === null || row[col] === ''" style="color: var(--text-tertiary); font-style: italic;">N/A</span>
+                                    <span v-else>{{ row[col] }}</span>
+                                </td>
+                            </tr>
+                            <tr v-if="filteredAndSortedDbRows.length === 0">
+                                <td :colspan="dbTableColumns.length || 1" style="text-align: center; padding: 32px; color: var(--text-tertiary); font-family: var(--font-sans);">
+                                    No records found.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-secondary); flex-shrink: 0;">
+                    <span>显示 {{ filteredAndSortedDbRows.length }} / {{ dbTableRows.length }} 行数据</span>
+                    <span v-if="dbSortKey">Sorted by {{ dbSortKey }} ({{ dbSortOrder }})</span>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <div v-if="selectedDbTableDescription" style="flex: 1; color: var(--text-secondary); font-size: 12px; line-height: 1.6; text-align: left;">
+                    <strong style="color: var(--text-primary);">说明：</strong>{{ selectedDbTableDescription }}
+                </div>
+                <button @click="showDbViewerModal = false" class="btn btn-primary" style="flex-shrink: 0;">Close</button>
+            </div>
+        </div>
+    </div>
+    </transition>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container">
+        <transition name="fade">
+            <div class="toast" v-if="toast.visible" :class="{ [toast.type]: true }">
+                <svg v-if="toast.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                {{ toast.message }}
+            </div>
+        </transition>
+    </div>
+
+</div>
+{% endraw %}
+
+<script>
+    window.__COUNTRY_OPTIONS__ = {{ country_options | tojson }};
+</script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

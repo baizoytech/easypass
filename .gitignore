@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db-wal
+*.db-shm
+*.db-journal
+libs/
+data/
+dist/
+build/
+installer/
+release/
+.agents/
+scripts/archive/
+scripts/scratch/
